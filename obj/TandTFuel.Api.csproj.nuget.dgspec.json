@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/Users/binurathiranjaya/Projects/TandTFuel.Api/TandTFuel.Api.csproj": {}
+    "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\TandTFuel.Api.csproj": {}
   },
   "projects": {
-    "/Users/binurathiranjaya/Projects/TandTFuel.Api/TandTFuel.Api.csproj": {
+    "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\TandTFuel.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/binurathiranjaya/Projects/TandTFuel.Api/TandTFuel.Api.csproj",
+        "projectUniqueName": "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\TandTFuel.Api.csproj",
         "projectName": "TandTFuel.Api",
-        "projectPath": "/Users/binurathiranjaya/Projects/TandTFuel.Api/TandTFuel.Api.csproj",
-        "packagesPath": "/Users/binurathiranjaya/.nuget/packages/",
-        "outputPath": "/Users/binurathiranjaya/Projects/TandTFuel.Api/obj/",
+        "projectPath": "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\TandTFuel.Api.csproj",
+        "packagesPath": "C:\\Users\\BinuraMadoluwage\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/Users/binurathiranjaya/.nuget/NuGet/NuGet.Config"
+          "C:\\Users\\BinuraMadoluwage\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net9.0"
@@ -58,27 +58,27 @@
             },
             "Microsoft.EntityFrameworkCore": {
               "target": "Package",
-              "version": "[8.0.11, )"
+              "version": "[9.0.11, )"
             },
             "Microsoft.EntityFrameworkCore.Design": {
               "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
               "suppressParent": "All",
               "target": "Package",
-              "version": "[8.0.11, )"
+              "version": "[9.0.11, )"
             },
             "Microsoft.EntityFrameworkCore.Relational": {
               "target": "Package",
-              "version": "[8.0.11, )"
+              "version": "[9.0.11, )"
             },
             "Microsoft.EntityFrameworkCore.SqlServer": {
               "target": "Package",
-              "version": "[8.0.11, )"
+              "version": "[9.0.11, )"
             },
             "Microsoft.EntityFrameworkCore.Tools": {
               "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
               "suppressParent": "All",
               "target": "Package",
-              "version": "[8.0.11, )"
+              "version": "[9.0.11, )"
             },
             "Microsoft.IdentityModel": {
               "target": "Package",
@@ -116,7 +116,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.305/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.308/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
