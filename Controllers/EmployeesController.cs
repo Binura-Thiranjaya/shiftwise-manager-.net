@@ -67,7 +67,7 @@ public class EmployeesController : ControllerBase
                 {
                     EmployeeId = e.Id,
                     Id = u != null ? u.Id : null,
-
+                    Role = u != null ? u.Role : null,
                     FirstName = e.FirstName,
                     LastName = e.LastName,
                     Email = e.Email,
