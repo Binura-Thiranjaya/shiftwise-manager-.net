@@ -28,4 +28,5 @@ public class EmployeeStationDto
     public Guid StationId { get; set; }
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
+    
 }

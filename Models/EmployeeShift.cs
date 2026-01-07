@@ -39,11 +39,8 @@ public class EmployeeShift : BaseEntity
     public decimal HourlyRate { get; set; }
 
     [MaxLength(20)]
-    public string Status { get; set; } = "Pending"; // Pending, Approved, Rejected, Locked
-
-    public bool IsLocked { get; set; } = false;
-
-    public Guid? ApprovedBy { get; set; }
+    public string Status { get; set; } = "Pending"; // Pending, Locked
+    
     public DateTime? ApprovedAt { get; set; }
 
     [MaxLength(500)]
