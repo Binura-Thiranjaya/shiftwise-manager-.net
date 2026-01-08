@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TandTFuel.Api.Data;
@@ -46,7 +47,6 @@ public class ShiftsController : ControllerBase
             TotalHours = Math.Round(hours, 2),
             HourlyRate = rate,
             Status = "Pending",
-            IsLocked = false,
             Notes = dto.Notes
         };
 
@@ -157,7 +157,6 @@ public class ShiftsController : ControllerBase
                 TotalHours = s.TotalHours,
                 HourlyRate = s.HourlyRate,
                 Status = s.Status,
-                IsLocked = s.IsLocked,
                 Notes = s.Notes,
                 StationId = s.StationId,
                 StationName = s.Station.Name,
@@ -167,5 +166,30 @@ public class ShiftsController : ControllerBase
             .ToListAsync();
 
         return Ok(list);
+    }
+    
+    //Togggle shift status
+    [Authorize]
+    [HttpPatch("{id}/status")]
+    public async Task<ActionResult> ToggleStatus(Guid id, [FromBody] ShiftStatusUpdate dto)
+    {
+        var shift = await _db.EmployeeShifts.FirstOrDefaultAsync(s => s.Id == id);
+        if (shift is null) return NotFound("Shift not found.");
+
+        var employeeIdClaim = User.FindFirstValue("employeeId");
+        if (string.IsNullOrWhiteSpace(employeeIdClaim))
+            return Forbid("Not an employee account.");
+
+        if (!Guid.TryParse(employeeIdClaim, out var employeeId))
+            return Unauthorized("Invalid employeeId claim.");
+
+        if (shift.EmployeeId != employeeId)
+            return Forbid("You can only update your own shifts.");
+        
+
+        shift.Status = dto.Status;
+        shift.ApprovedAt = dto.Status == "Locked" ? DateTime.UtcNow : null;
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Shift approved successfully" });
     }
 }

@@ -19,8 +19,7 @@ public class PayrollService : IPayrollService
             .Include(s => s.ShiftType)
             .Where(s => s.EmployeeId == employeeId
                         && s.Date.Date >= periodStart.Date
-                        && s.Date.Date <= periodEnd.Date
-                        && !s.IsLocked)
+                        && s.Date.Date <= periodEnd.Date)
             .OrderBy(s => s.Date)
             .ToListAsync();
 
@@ -68,7 +67,6 @@ public class PayrollService : IPayrollService
         // lock shifts
         foreach (var s in shifts)
         {
-            s.IsLocked = true;
             s.Status = "Locked";
         }
 

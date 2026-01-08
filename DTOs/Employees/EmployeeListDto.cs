@@ -4,6 +4,7 @@ public class EmployeeListDto
 {
     public Guid? Id { get; set; }  
     public Guid EmployeeId { get; set; }
+    public string Role { get; set; }
 
     public string FirstName { get; set; } = "";
     public string LastName { get; set; } = "";
@@ -27,4 +28,5 @@ public class EmployeeStationDto
     public Guid StationId { get; set; }
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
+    
 }

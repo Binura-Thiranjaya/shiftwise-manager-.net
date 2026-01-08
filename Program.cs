@@ -85,6 +85,9 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+//Welcome message at root
+app.MapGet("/", () => "Welcome to the TandT Fuel API!");
+
 // ✅ Run DB migrations + Seed data on startup
 using (var scope = app.Services.CreateScope())
 {
