@@ -4,6 +4,9 @@ namespace TandTFuel.Api.DTOs.Stations;
 
 public class StationUpdateDto
 {
+    [Required, MaxLength(20)]
+    public string Code { get; set; } = "";    
+    
     [Required, MaxLength(200)]
     public string Name { get; set; } = "";
 

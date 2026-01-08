@@ -70,4 +70,17 @@ public class PayslipsController : ControllerBase
 
         return Ok(list);
     }
+    
+    //NEED A FUNCTION TOTAL WHICH TAKE PARAMENTS FOR START DATE AND END DATE AND RETURNS TOTAL PAYSLIPS GENERATED IN THAT PERIOD
+    [Authorize]
+    [HttpGet("total")]
+    public async Task<ActionResult<int>> Total(DateTime startDate, DateTime endDate)
+    {
+        if (endDate.Date < startDate.Date)
+            return BadRequest("End date must be after start date.");
+        var total = await _db.Payslips
+            .Where(p => p.GeneratedAt.Date >= startDate.Date && p.GeneratedAt.Date <= endDate.Date)
+            .CountAsync();
+        return Ok(total);
+    }
 }

@@ -230,12 +230,26 @@ public class EmployeesController : ControllerBase
         }
     }
 
-    // ✅ Get all employees with ONLY active assigned stations
-    [Authorize(Policy = "ManagerOrAdmin")]
-    [HttpGet]
-    public async Task<ActionResult<List<EmployeeListDto>>> GetAll()
+    // ✅ Get all employees with ONLY active assigned stations 
+    
+[Authorize(Policy = "ManagerOrAdmin")]
+[HttpGet]
+public async Task<ActionResult<List<EmployeeListDto>>> GetAll()
+{
+    // ✅ role claim in your token is:
+    // http://schemas.microsoft.com/ws/2008/06/identity/claims/role
+    var actorRole = User.FindFirstValue(ClaimTypes.Role) ?? "";
+    var isAdmin = actorRole.Equals("admin", StringComparison.OrdinalIgnoreCase);
+
+    // ✅ employeeId claim may be missing for admin
+    var employeeIdClaim = User.FindFirstValue("employeeId");
+
+    // -----------------------------
+    // ADMIN: see all employees
+    // -----------------------------
+    if (isAdmin && string.IsNullOrWhiteSpace(employeeIdClaim))
     {
-        var employees = await
+        var employeesAll = await
             (from e in _db.Employees.AsNoTracking()
              join u in _db.Users.AsNoTracking()
                 on e.Id equals u.EmployeeId into userJoin
@@ -255,10 +269,12 @@ public class EmployeesController : ControllerBase
                  HourlyRateA = e.HourlyRateA,
                  HourlyRateB = e.HourlyRateB,
                  HoursForRateA = e.HoursForRateA,
-                 IsActive = u.IsActive,
+
+                 // ✅ if there is no linked User row, fallback
+                 IsActive = u != null ? u.IsActive : e.IsActive,
                  HireDate = e.HireDate,
 
-                 // ✅ ONLY stations assigned AND active
+                 // ✅ Only active employee-station links + active stations
                  Stations = e.EmployeeStations
                      .Where(es => es.IsActive && es.Station.IsActive)
                      .Select(es => new EmployeeStationDto
@@ -271,8 +287,78 @@ public class EmployeesController : ControllerBase
              })
             .ToListAsync();
 
-        return Ok(employees);
+        return Ok(employeesAll);
     }
+
+    // -----------------------------
+    // NON-ADMIN: station scoped
+    // -----------------------------
+    if (string.IsNullOrWhiteSpace(employeeIdClaim))
+        return Forbid("This account is not linked to an employee (no employeeId claim).");
+
+    if (!Guid.TryParse(employeeIdClaim, out var actorEmployeeId))
+        return Unauthorized("Invalid employeeId claim.");
+
+    // ✅ Get stationIds assigned to the logged-in user (only active link + active station)
+    var myStationIds = await _db.EmployeeStations
+        .AsNoTracking()
+        .Where(es => es.EmployeeId == actorEmployeeId && es.IsActive && es.Station.IsActive)
+        .Select(es => es.StationId)
+        .Distinct()
+        .ToListAsync();
+
+    if (myStationIds.Count == 0)
+        return Ok(new List<EmployeeListDto>());
+
+    var employeesScoped = await
+        (from e in _db.Employees.AsNoTracking()
+         join u in _db.Users.AsNoTracking()
+            on e.Id equals u.EmployeeId into userJoin
+         from u in userJoin.DefaultIfEmpty()
+
+         // ✅ employee must share at least one active station with logged-in user
+         where e.EmployeeStations.Any(es =>
+             es.IsActive &&
+             es.Station.IsActive &&
+             myStationIds.Contains(es.StationId))
+
+         orderby e.FirstName, e.LastName
+         select new EmployeeListDto
+         {
+             EmployeeId = e.Id,
+             Id = u != null ? u.Id : null,
+             Role = u != null ? u.Role : null,
+
+             FirstName = e.FirstName,
+             LastName = e.LastName,
+             Email = e.Email,
+             Phone = e.Phone,
+             NINumber = e.NINumber,
+             HourlyRateA = e.HourlyRateA,
+             HourlyRateB = e.HourlyRateB,
+             HoursForRateA = e.HoursForRateA,
+
+             IsActive = u != null ? u.IsActive : e.IsActive,
+             HireDate = e.HireDate,
+
+             // ✅ ONLY stations that are:
+             // - active employee-station link
+             // - active station
+             // - inside logged-in user's station scope
+             Stations = e.EmployeeStations
+                 .Where(es => es.IsActive && es.Station.IsActive && myStationIds.Contains(es.StationId))
+                 .Select(es => new EmployeeStationDto
+                 {
+                     StationId = es.Station.Id,
+                     Code = es.Station.Code,
+                     Name = es.Station.Name
+                 })
+                 .ToList()
+         })
+        .ToListAsync();
+
+    return Ok(employeesScoped);
+}
 
     // ✅ Reset employee password (Admin/Manager)
     [Authorize(Policy = "ManagerOrAdmin")]
@@ -305,37 +391,95 @@ public class EmployeesController : ControllerBase
 
     // ✅ Admin/Manager can view all staff accounts (all roles)
     [Authorize(Policy = "ManagerOrAdmin")]
-    [HttpGet("users")]
-    public async Task<ActionResult<List<UserWithEmployeeDto>>> GetAllUsersWithEmployee()
+[HttpGet("users")]
+public async Task<ActionResult<List<UserWithEmployeeDto>>> GetAllUsersWithEmployee()
+{
+    var actorRole = User.FindFirstValue(ClaimTypes.Role) ?? "";
+    var isAdmin = actorRole.Equals("admin", StringComparison.OrdinalIgnoreCase);
+
+    var employeeIdClaim = User.FindFirstValue("employeeId");
+
+    // ✅ Admin without employeeId => see all
+    if (isAdmin && string.IsNullOrWhiteSpace(employeeIdClaim))
     {
-        var data =
-            await (from u in _db.Users.AsNoTracking()
-                   join e in _db.Employees.AsNoTracking()
-                       on u.EmployeeId equals e.Id into empJoin
-                   from e in empJoin.DefaultIfEmpty()
-                   orderby u.Email
-                   select new UserWithEmployeeDto
-                   {
-                       Id = u.Id,
-                       Email = u.Email,
-                       Role = u.Role.ToLower(),
-                       IsActive = u.IsActive,
-                       EmployeeId = u.EmployeeId,
-                       CreatedAt = u.CreatedAt,
-                       LastLoginAt = u.LastLoginAt,
+        var all = await (from u in _db.Users.AsNoTracking()
+                         join e in _db.Employees.AsNoTracking()
+                             on u.EmployeeId equals e.Id into empJoin
+                         from e in empJoin.DefaultIfEmpty()
+                         orderby u.Email
+                         select new UserWithEmployeeDto
+                         {
+                             Id = u.Id,
+                             Email = u.Email,
+                             Role = u.Role.ToLower(),
+                             IsActive = u.IsActive,
+                             EmployeeId = u.EmployeeId,
+                             CreatedAt = u.CreatedAt,
+                             LastLoginAt = u.LastLoginAt,
 
-                       FirstName = e != null ? e.FirstName : null,
-                       LastName = e != null ? e.LastName : null,
-                       Phone = e != null ? e.Phone : null,
-                       NINumber = e != null ? e.NINumber : null,
-                       HourlyRateA = e != null ? e.HourlyRateA : null,
-                       HourlyRateB = e != null ? e.HourlyRateB : null,
-                       HoursForRateA = e != null ? e.HoursForRateA : null,
-                       HireDate = e != null ? e.HireDate : null
-                   }).ToListAsync();
+                             FirstName = e != null ? e.FirstName : null,
+                             LastName = e != null ? e.LastName : null,
+                             Phone = e != null ? e.Phone : null,
+                             NINumber = e != null ? e.NINumber : null,
+                             HourlyRateA = e != null ? e.HourlyRateA : null,
+                             HourlyRateB = e != null ? e.HourlyRateB : null,
+                             HoursForRateA = e != null ? e.HoursForRateA : null,
+                             HireDate = e != null ? e.HireDate : null
+                         }).ToListAsync();
 
-        return Ok(data);
+        return Ok(all);
     }
+
+    // ✅ Non-admin => must be employee-linked for station scoping
+    if (string.IsNullOrWhiteSpace(employeeIdClaim))
+        return Forbid("Not an employee account (missing employeeId claim).");
+
+    if (!Guid.TryParse(employeeIdClaim, out var actorEmployeeId))
+        return Unauthorized("Invalid employeeId claim.");
+
+    // ✅ stations assigned to logged-in user (active link + active station)
+    var myStationIds = await _db.EmployeeStations
+        .AsNoTracking()
+        .Where(es => es.EmployeeId == actorEmployeeId && es.IsActive && es.Station.IsActive)
+        .Select(es => es.StationId)
+        .Distinct()
+        .ToListAsync();
+
+    if (myStationIds.Count == 0)
+        return Ok(new List<UserWithEmployeeDto>());
+
+    // ✅ only users whose employee has at least one station in myStationIds (active+active)
+    var scoped = await (from u in _db.Users.AsNoTracking()
+        join e in _db.Employees.AsNoTracking()
+            on u.EmployeeId equals e.Id
+        where e.EmployeeStations.Any(es =>
+            es.IsActive &&
+            es.Station.IsActive &&
+            myStationIds.Contains(es.StationId))
+        orderby u.Email
+        select new UserWithEmployeeDto
+        {
+            Id = u.Id,
+            Email = u.Email,
+            Role = u.Role.ToLower(),
+            IsActive = u.IsActive,
+            EmployeeId = u.EmployeeId,
+            CreatedAt = u.CreatedAt,
+            LastLoginAt = u.LastLoginAt,
+
+            FirstName = e.FirstName,
+            LastName = e.LastName,
+            Phone = e.Phone,
+            NINumber = e.NINumber,
+            HourlyRateA = e.HourlyRateA,
+            HourlyRateB = e.HourlyRateB,
+            HoursForRateA = e.HoursForRateA,
+            HireDate = e.HireDate
+        }).ToListAsync();
+
+
+    return Ok(scoped);
+}
 
 [Authorize(Policy = "ManagerOrAdmin")]
 [HttpPut("{id:guid}")]
@@ -470,11 +614,19 @@ public async Task<IActionResult> Update(Guid id, [FromBody] EmployeeUpdateDto dt
             isActive = user.IsActive
         });
     }
-
-
     
-    
-    
+    //Update user role (Admin-only)
+    [Authorize(Policy = "AdminOnly")]
+    [HttpPut("{id:guid}/role")]
+    public async Task<IActionResult> UpdateUserRole(Guid id, [FromBody] UpdateUserRoleDto dto)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id);
+        if (user is null) return NotFound("User not found.");
+        user.Role = dto.Role.Trim().ToLower();
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "User role updated." });
+    }
     // ✅ Change password (admin-only or self)
     [Authorize]
     [HttpPut("{id:guid}/change-password")]

@@ -11,7 +11,7 @@ public static class DbSeeder
         await db.Database.MigrateAsync();
 
         // Admin
-        var adminEmail = "admin@ttfuel.com";
+        var adminEmail = "itadmin@ttfuel.com";
         if (!await db.Users.AnyAsync(x => x.Email == adminEmail))
         {
             db.Users.Add(new User

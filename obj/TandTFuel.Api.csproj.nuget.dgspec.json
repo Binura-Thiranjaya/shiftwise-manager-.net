@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/Users/binurathiranjaya/Projects/TandTFuel.Api/TandTFuel.Api.csproj": {}
+    "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\TandTFuel.Api.csproj": {}
   },
   "projects": {
-    "/Users/binurathiranjaya/Projects/TandTFuel.Api/TandTFuel.Api.csproj": {
+    "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\TandTFuel.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/binurathiranjaya/Projects/TandTFuel.Api/TandTFuel.Api.csproj",
+        "projectUniqueName": "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\TandTFuel.Api.csproj",
         "projectName": "TandTFuel.Api",
-        "projectPath": "/Users/binurathiranjaya/Projects/TandTFuel.Api/TandTFuel.Api.csproj",
-        "packagesPath": "/Users/binurathiranjaya/.nuget/packages/",
-        "outputPath": "/Users/binurathiranjaya/Projects/TandTFuel.Api/obj/",
+        "projectPath": "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\TandTFuel.Api.csproj",
+        "packagesPath": "C:\\Users\\BinuraMadoluwage\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\BinuraMadoluwage\\Downloads\\shiftwise-manager-.net\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/Users/binurathiranjaya/.nuget/NuGet/NuGet.Config"
+          "C:\\Users\\BinuraMadoluwage\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net9.0"
@@ -44,6 +44,10 @@
         "net9.0": {
           "targetAlias": "net9.0",
           "dependencies": {
+            "Azure.Identity": {
+              "target": "Package",
+              "version": "[1.17.1, )"
+            },
             "BCrypt.Net-Next": {
               "target": "Package",
               "version": "[4.0.3, )"
@@ -116,7 +120,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.305/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.308/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

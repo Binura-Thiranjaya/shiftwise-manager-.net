@@ -15,12 +15,36 @@ public class StationsController : ControllerBase
     private readonly AppDbContext _db;
     public StationsController(AppDbContext db) => _db = db;
 
-    [Authorize(Policy = "ManagerOrAdmin")]
+    //Get the assigned stations for a login user if the IT Admin login then get all stations to check is itdmin or not , in employeeid is not their
+    [Authorize( Policy = "SupervisorOrAbove")]
     [HttpGet]
     public async Task<ActionResult<List<Station>>> GetAll()
-        => Ok(await _db.Stations.OrderBy(s => s.Code).ToListAsync());
-
-    [Authorize(Policy = "ManagerOrAdmin")]
+    {
+        var employeeIdClaim = User.FindFirstValue("employeeId");
+        if (string.IsNullOrWhiteSpace(employeeIdClaim))
+        {
+            // IT Admin case - return all stations
+            var allStations = await _db.Stations.OrderBy(s => s.Name).ToListAsync();
+            return Ok(allStations);
+        }
+        if (!Guid.TryParse(employeeIdClaim, out var employeeId))
+            return Unauthorized("Invalid employeeId claim.");
+        var stations = await _db.EmployeeStations
+            .Where(es => es.EmployeeId == employeeId && es.IsActive)
+            .Include(es => es.Station)
+            .Select(es => es.Station)
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+       
+        
+        return Ok(stations);
+    }
+    
+                    
+    
+                    
+                    
+                    [Authorize(Policy = "ManagerOrAdmin")]
     [HttpPost]
     public async Task<ActionResult<Station>> Create(StationCreateDto dto)
     {
@@ -36,7 +60,7 @@ public class StationsController : ControllerBase
     {
         var station = await _db.Stations.FirstOrDefaultAsync(x => x.Id == id);
         if (station is null) return NotFound();
-
+        station.Code = dto.Code.Trim();
         station.Name = dto.Name.Trim();
         station.Location = dto.Location;
         station.IsActive = dto.IsActive;
@@ -44,6 +68,19 @@ public class StationsController : ControllerBase
         await _db.SaveChangesAsync();
         return Ok(station);
     }
+   
+    //Patch toggle-status
+    [Authorize(Policy = "ManagerOrAdmin")]
+    [HttpPatch("{id:guid}/toggle-status")]
+    public async Task<IActionResult> ToggleStatus(Guid id)
+    {
+        var station = await _db.Stations.FirstOrDefaultAsync(x => x.Id == id );
+        if (station is null) return NotFound();
+        station.IsActive = !station.IsActive;
+        await _db.SaveChangesAsync();
+        return Ok(station);
+    }
+    
     //Get the stations assined to a users employee id get from the token
     [Authorize(Policy = "SupervisorOrAbove")]
     [HttpGet("my-stations")]

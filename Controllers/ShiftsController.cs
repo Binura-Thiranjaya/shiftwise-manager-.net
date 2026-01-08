@@ -75,25 +75,37 @@ public class ShiftsController : ControllerBase
         return Ok(readDto);
     }
 
-    [Authorize(Policy = "SupervisorOrAbove")]
-    [HttpGet]
-    public async Task<ActionResult<List<ShiftReadDto>>> GetAll(
-        [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to)
+   [Authorize(Policy = "SupervisorOrAbove")]
+[HttpGet]
+public async Task<ActionResult<List<ShiftReadDto>>> GetAll(
+    [FromQuery] DateTime? from,
+    [FromQuery] DateTime? to)
+{
+    // ✅ role claim in token is: http://schemas.microsoft.com/ws/2008/06/identity/claims/role
+    var actorRole = User.FindFirstValue(ClaimTypes.Role) ?? "";
+    var isAdmin = actorRole.Equals("admin", StringComparison.OrdinalIgnoreCase);
+
+    // ✅ may be null for admin accounts (no employee linked)
+    var employeeIdClaim = User.FindFirstValue("employeeId");
+
+    // ✅ Base query
+    var q = _db.EmployeeShifts
+        .AsNoTracking()
+        .Include(s => s.Employee)
+        .Include(s => s.Station)
+        .Include(s => s.ShiftType)
+        .AsQueryable();
+
+    // ✅ Date filters
+    if (from.HasValue) q = q.Where(s => s.Date >= from.Value.Date);
+    if (to.HasValue) q = q.Where(s => s.Date <= to.Value.Date);
+
+    // -----------------------------
+    // ADMIN with no employeeId => see all shifts
+    // -----------------------------
+    if (isAdmin && string.IsNullOrWhiteSpace(employeeIdClaim))
     {
-        var q = _db.EmployeeShifts
-            .Include(s => s.Employee)   // ✅ IMPORTANT
-            .Include(s => s.Station)
-            .Include(s => s.ShiftType)
-            .AsQueryable();
-
-        if (from.HasValue)
-            q = q.Where(s => s.Date >= from.Value.Date);
-
-        if (to.HasValue)
-            q = q.Where(s => s.Date <= to.Value.Date);
-
-        var list = await q
+        var all = await q
             .OrderByDescending(s => s.Date)
             .Select(s => new ShiftReadDto
             {
@@ -105,24 +117,74 @@ public class ShiftsController : ControllerBase
                 HourlyRate = s.HourlyRate,
                 Status = s.Status,
 
-                // ✅ Employee details
                 EmployeeId = s.Employee.Id,
                 EmployeeFirstName = s.Employee.FirstName,
                 EmployeeLastName = s.Employee.LastName,
                 EmployeeEmail = s.Employee.Email,
 
-                // ✅ Station
                 StationId = s.Station.Id,
                 StationName = s.Station.Name,
 
-                // ✅ Shift type
                 ShiftTypeId = s.ShiftType.Id,
                 ShiftTypeName = s.ShiftType.Name
             })
             .ToListAsync();
 
-        return Ok(list);
+        return Ok(all);
     }
+
+    // -----------------------------
+    // NON-ADMIN => station-scoped
+    // -----------------------------
+    if (string.IsNullOrWhiteSpace(employeeIdClaim))
+        return Forbid("Not an employee account (missing employeeId claim).");
+
+    if (!Guid.TryParse(employeeIdClaim, out var actorEmployeeId))
+        return Unauthorized("Invalid employeeId claim.");
+
+    // ✅ Station scope of logged-in user: only active link + active station
+    var myStationIds = await _db.EmployeeStations
+        .AsNoTracking()
+        .Where(es => es.EmployeeId == actorEmployeeId && es.IsActive && es.Station.IsActive)
+        .Select(es => es.StationId)
+        .Distinct()
+        .ToListAsync();
+
+    if (myStationIds.Count == 0)
+        return Ok(new List<ShiftReadDto>());
+
+    // ✅ Only shifts at stations inside myStationIds + station active
+    q = q.Where(s =>
+        myStationIds.Contains(s.StationId) &&
+        s.Station.IsActive);
+
+    var scoped = await q
+        .OrderByDescending(s => s.Date)
+        .Select(s => new ShiftReadDto
+        {
+            Id = s.Id,
+            Date = s.Date,
+            TimeIn = s.TimeIn,
+            TimeOut = s.TimeOut,
+            TotalHours = s.TotalHours,
+            HourlyRate = s.HourlyRate,
+            Status = s.Status,
+
+            EmployeeId = s.Employee.Id,
+            EmployeeFirstName = s.Employee.FirstName,
+            EmployeeLastName = s.Employee.LastName,
+            EmployeeEmail = s.Employee.Email,
+
+            StationId = s.Station.Id,
+            StationName = s.Station.Name,
+
+            ShiftTypeId = s.ShiftType.Id,
+            ShiftTypeName = s.ShiftType.Name
+        })
+        .ToListAsync();
+
+    return Ok(scoped);
+}
 
     // Employee view own shifts
     [Authorize]
@@ -169,27 +231,162 @@ public class ShiftsController : ControllerBase
     }
     
     //Togggle shift status
-    [Authorize]
-    [HttpPatch("{id}/status")]
-    public async Task<ActionResult> ToggleStatus(Guid id, [FromBody] ShiftStatusUpdate dto)
+   [Authorize]
+    [HttpPut("{id:guid}/status")]
+    public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] ShiftStatusUpdate dto)
     {
-        var shift = await _db.EmployeeShifts.FirstOrDefaultAsync(s => s.Id == id);
-        if (shift is null) return NotFound("Shift not found.");
+        // ✅ Start transaction (rollback everything if any error)
+        await using var tx = await _db.Database.BeginTransactionAsync();
 
-        var employeeIdClaim = User.FindFirstValue("employeeId");
-        if (string.IsNullOrWhiteSpace(employeeIdClaim))
-            return Forbid("Not an employee account.");
+        try
+        {
+            var shift = await _db.EmployeeShifts.FirstOrDefaultAsync(s => s.Id == id);
+            if (shift is null) return NotFound("Shift not found.");
 
-        if (!Guid.TryParse(employeeIdClaim, out var employeeId))
-            return Unauthorized("Invalid employeeId claim.");
+            // Normalize
+            var current = (shift.Status ?? "").Trim();
+            var next = (dto.Status ?? "").Trim();
 
-        if (shift.EmployeeId != employeeId)
-            return Forbid("You can only update your own shifts.");
-        
+            if (string.IsNullOrWhiteSpace(next))
+                return BadRequest("Status is required.");
 
-        shift.Status = dto.Status;
-        shift.ApprovedAt = dto.Status == "Locked" ? DateTime.UtcNow : null;
-        await _db.SaveChangesAsync();
-        return Ok(new { message = "Shift approved successfully" });
+            // ✅ Only allow these statuses
+            var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Pending", "Approved", "Locked", "Rejected"
+            };
+
+            if (!allowed.Contains(next))
+                return BadRequest("Invalid status value. Allowed: Pending, Approved, Locked, Rejected.");
+
+            // ✅ Final states cannot be modified
+            if (current.Equals("Locked", StringComparison.OrdinalIgnoreCase))
+                return BadRequest("Locked shift cannot be modified.");
+
+            if (current.Equals("Rejected", StringComparison.OrdinalIgnoreCase))
+                return BadRequest("Rejected shift cannot be modified.");
+
+            // ✅ Helper role check (safe for casing)
+            bool IsInAnyRole(params string[] roles)
+                => roles.Any(r =>
+                    User.IsInRole(r) ||
+                    User.IsInRole(r.ToLower()) ||
+                    User.IsInRole(r.ToUpper()));
+
+            var isSupervisorOrAbove = IsInAnyRole("Supervisor", "Manager", "Admin");
+
+            // ✅ Determine if caller is employee (has employeeId claim)
+            var employeeIdClaim = User.FindFirstValue("employeeId");
+            var hasEmployeeId = Guid.TryParse(employeeIdClaim, out var callerEmployeeId);
+
+            // ✅ If NOT supervisor/admin, must be a valid employee and must own the shift
+            if (!isSupervisorOrAbove)
+            {
+                if (!hasEmployeeId)
+                    return Forbid("Not an employee account.");
+
+                if (shift.EmployeeId != callerEmployeeId)
+                    return Forbid("Cannot change status of another employee's shift.");
+
+                // ✅ Employee can only move Pending -> Approved/Rejected
+                if (!current.Equals("Pending", StringComparison.OrdinalIgnoreCase))
+                    return BadRequest("Employees can only update Pending shifts.");
+
+                if (!(next.Equals("Approved", StringComparison.OrdinalIgnoreCase) ||
+                      next.Equals("Rejected", StringComparison.OrdinalIgnoreCase)))
+                    return BadRequest("Employees can only set status to Approved or Rejected.");
+            }
+
+            // ✅ Supervisor/Admin rules
+            // - Can approve/reject pending
+            // - Can lock only Approved
+            if (next.Equals("Locked", StringComparison.OrdinalIgnoreCase) &&
+                !current.Equals("Approved", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest("Only Approved shifts can be Locked.");
+            }
+
+            // ✅ Apply status change
+            shift.Status = next;
+
+            // ✅ timestamps
+            if (next.Equals("Approved", StringComparison.OrdinalIgnoreCase) ||
+                next.Equals("Rejected", StringComparison.OrdinalIgnoreCase))
+            {
+                shift.ApprovedAt = DateTime.UtcNow; // keep your column (even though name says ApprovedAt)
+            }
+
+            // If you have these columns, uncomment:
+            // if (next.Equals("Locked", StringComparison.OrdinalIgnoreCase))
+            // {
+            //     shift.LockedAt = DateTime.UtcNow;
+            //     shift.IsLocked = true;
+            // }
+
+            // ✅ When LOCKED → create/update payslip for payroll processing
+            if (next.Equals("Locked", StringComparison.OrdinalIgnoreCase))
+            {
+                // ---- Period logic (simple DAILY payslip; safe default) ----
+                // If you want weekly/monthly, tell me and I’ll adjust.
+                var periodStart = shift.Date.Date;
+                var periodEnd = shift.Date.Date;
+
+                // ✅ Find existing payslip for this employee+period (avoid duplicates)
+                var payslip = await _db.Payslips.FirstOrDefaultAsync(p =>
+                    p.EmployeeId == shift.EmployeeId &&
+                    p.PeriodStart == periodStart &&
+                    p.PeriodEnd == periodEnd &&
+                    p.Status != "Voided");
+
+                var shiftHours = shift.TotalHours;
+                var shiftGross = Math.Round(shift.TotalHours * shift.HourlyRate, 2);
+                var employeePay = _db.Employees.FirstOrDefault(e => e.Id == shift.EmployeeId);
+                
+                if (payslip == null)
+                {
+                    //In the employee db Weely Hours for rate A is thier and need to cal culate by perhour rate and rest from rate B and store in paydetails
+                    payslip = new Payslip
+                    {
+                        Id = Guid.NewGuid(),
+                        EmployeeId = shift.EmployeeId,
+                        PeriodStart = periodStart,
+                        PeriodEnd = periodEnd,
+                        TotalHours = shiftHours,
+                        
+                        GrossPay = shiftGross,
+                        NetPay = shiftGross, // adjust later for deductions
+                        Status = "Generated",
+                        GeneratedAt = DateTime.UtcNow
+                    };
+
+                    _db.Payslips.Add(payslip);
+                }
+                else
+                {
+                    // ✅ Update totals (add this locked shift)
+                    payslip.TotalHours = Math.Round((payslip.TotalHours + shiftHours), 2);
+                    payslip.GrossPay = Math.Round((payslip.GrossPay + shiftGross), 2);
+                    payslip.NetPay = Math.Round((payslip.NetPay + shiftGross), 2);
+
+                    // keep status as Generated or whatever you use
+                    if (string.IsNullOrWhiteSpace(payslip.Status))
+                        payslip.Status = "Generated";
+                }
+            }
+
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            return Ok(new { message = $"Shift {next} successfully." });
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            // ✅ Return clean error for frontend (JSON)
+            return StatusCode(500, new { message = "Failed to update shift status.", error = ex.Message });
+        }
     }
+
+
+        
 }
