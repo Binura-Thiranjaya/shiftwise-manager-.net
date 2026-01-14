@@ -83,4 +83,55 @@ public class PayslipsController : ControllerBase
             .CountAsync();
         return Ok(total);
     }
+    
+    //NEED TO GET THE HOW MANY HOURS WORKED PER WEEK FOR A GIVEN EMPLOYEE ID AND DATE RANGE AND RETURN HOURS A * RATE A AND REMAINING HOURS * RATE B
+    [Authorize]
+    [HttpGet("weekly-pay/{employeeId:guid}")]
+    public async Task<IActionResult> GetWeeklyPay(
+        Guid employeeId, 
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate)
+    {
+        // 1️⃣ Fetch employee info
+        var employee = await _db.Employees.FirstOrDefaultAsync(e => e.Id == employeeId);
+        if (employee == null) return NotFound("Employee not found.");
+
+        // 2️⃣ Fetch shifts in date range
+        var shifts = await _db.EmployeeShifts
+            .Where(s => s.EmployeeId == employeeId 
+                        && s.Date >= startDate 
+                        && s.Date <= endDate 
+                        && s.Status == "Locked") // Only locked shifts count for payroll
+            .ToListAsync();
+
+        if (!shifts.Any()) return Ok(new { message = "No worked hours in this range." });
+
+        // 3️⃣ Aggregate total hours
+        decimal totalHours = shifts.Sum(s => s.TotalHours);
+
+        // 4️⃣ Calculate weekly pay
+        decimal hoursForRateA = Math.Min(totalHours, employee.HoursForRateA);
+        decimal hoursForRateB = Math.Max(0, totalHours - employee.HoursForRateA);
+
+        decimal amountRateA = hoursForRateA * employee.HourlyRateA;
+        decimal amountRateB = hoursForRateB * employee.HourlyRateB;
+
+        decimal totalAmount = amountRateA + amountRateB;
+
+        // 5️⃣ Return breakdown
+        return Ok(new
+        {
+            EmployeeId = employeeId,
+            TotalHours = totalHours,
+            HoursRateA = hoursForRateA,
+            HoursRateB = hoursForRateB,
+            AmountRateA = amountRateA,
+            AmountRateB = amountRateB,
+            TotalAmount = totalAmount,
+            ShiftCount = shifts.Count,
+            WeekStart = startDate,
+            WeekEnd = endDate
+        });
+    }
+
 }
