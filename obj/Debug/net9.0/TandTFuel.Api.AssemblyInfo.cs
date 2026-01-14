@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TandTFuel.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b55d455d5c81be9888d3158aa4ffde2b0384d6dc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a7601969042e1a2747d74d56ff89650c60946ec2")]
 [assembly: System.Reflection.AssemblyProductAttribute("TandTFuel.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TandTFuel.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
